@@ -48,8 +48,12 @@ gameBoard dd 0, 0, 0, 0,
              0, 0, 0, 0,
              0, 0, 0, 0,
              0, 0, 0, 0
+random_seed dd 0
 
 .const
+direction SBYTE -4, -16, 4, 16
+iterate_direction SBYTE 16, 4, -16, -4
+
 szClassName db 'MyClass', 0
 szCaptionMain db '2048-asm', 0
 szButton db 'button', 0
@@ -59,6 +63,152 @@ szAboutText db '一个使用汇编的简单2048小游戏', 0dh, 0ah, '使用方向键控制方块的移
 szFormat db '%d', 0
 
 .code
+rand PROC
+	mov eax, random_seed
+	mov ebx, 1103515245
+	mul ebx
+	add eax, 12345
+	mov random_seed, eax
+	mov ebx, 65536
+	mov edx, 0
+	div ebx
+	mov ebx, 32768
+	mov edx, 0
+	div ebx
+	mov eax, edx
+	ret
+rand ENDP
+
+GameCountEmptyCell PROC
+	mov ebx, 0
+	mov esi, offset gameBoard
+	mov ecx, 16
+	CountEmptyCellLoop:
+		lodsb
+		.if eax == 0
+			inc ebx
+		.endif
+	loop CountEmptyCellLoop
+	mov eax, ebx
+	ret
+GameCountEmptyCell ENDP
+
+GameProduceNumber PROC num_empty: DWORD
+	call rand
+	mov ebx, num_empty
+	mov edx, 0
+	div ebx
+
+	mov esi, offset gameBoard
+	mov ecx, 0
+	.while esi < offset gameBoard + 64
+		mov ebx, [esi]
+		.if ebx == 0
+			.if ecx == edx
+				mov ebx, 10
+				mov edx, 0
+				div ebx
+				.if edx == 0
+					mov DWORD PTR [esi], 4
+				.else
+					mov DWORD PTR [esi], 2
+				.endif
+				ret
+			.endif
+			inc ecx
+		.endif
+		add esi, 4
+	.endw
+	ret
+GameProduceNumber ENDP
+
+GameCheckOver PROC
+	ret
+GameCheckOver ENDP
+
+GameOperate PROC opr: DWORD
+	LOCAL operation_success: BYTE
+	mov esi, offset gameBoard
+	.if opr >= 2
+		add esi, 60
+	.endif
+	mov operation_success, 0
+	
+	mov eax, opr
+	movsx ebx, direction[eax]
+
+	mov ecx, 0
+	.while ecx < 4
+		push ecx
+		push esi
+
+		mov edi, esi
+		mov ecx, 0
+		
+		.while ecx < 3
+			sub esi, ebx
+			mov eax, [esi]
+			.if eax != 0
+				.if eax != [edi]
+					mov eax, [edi]
+					.if eax != 0
+						sub edi, ebx
+					.endif
+
+					.if edi != esi
+						mov operation_success, 1
+						mov eax, [esi]
+						mov [edi], eax
+						mov eax, 0
+						mov [esi], eax
+					.endif
+				.else
+					mov edx, 2
+					mul edx
+					mov DWORD PTR [edi], eax
+					mov eax, 0
+					mov [esi], eax
+					sub edi, ebx
+					mov operation_success, 1
+				.endif
+			.endif
+			inc ecx
+		.endw
+
+		pop esi
+		mov eax, opr
+		movsx ecx, iterate_direction[eax]
+		add esi, ecx
+
+		pop ecx
+		inc ecx
+	.endw
+
+	.if operation_success == 1
+		invoke GameCountEmptyCell
+		push eax
+		invoke GameProduceNumber, eax
+		pop eax
+		.if eax == 0
+			; check_game_end
+		.endif
+	.endif
+	ret
+GameOperate ENDP
+
+; game_board is an zero-filled array whose size is 16
+GameInit PROC
+	mov edi, offset gameBoard
+	mov eax, 0
+	mov ecx, 16
+	InitSetZero:
+	stosd
+	loop InitSetZero
+	invoke GameProduceNumber, 16
+	invoke GameProduceNumber, 15
+	ret
+GameInit ENDP
+
 _DisplayAbout proc
     pushad
     invoke MessageBox, hWinMain, addr szAboutText, addr szAboutTitle, MB_OK
@@ -160,22 +310,24 @@ _ProcWinMain proc uses ebx edi esi,
             invoke _DisplayAbout
         .elseif eax == IDM_PLAYER
             invoke CheckMenuRadioItem, hMenu, IDM_PLAYER, IDM_TRAIN, eax, MF_BYCOMMAND
+			invoke GameInit
         .elseif eax == IDM_TRAIN
             invoke CheckMenuRadioItem, hMenu, IDM_PLAYER, IDM_TRAIN, eax, MF_BYCOMMAND
         .endif
+        invoke InvalidateRect, hWnd, NULL, FALSE
     .elseif eax == WM_KEYDOWN
         mov eax, wParam
         .if eax == VK_UP
-            ;invoke
+            invoke GameOperate, 1
             invoke InvalidateRect, hWnd, NULL, FALSE
         .elseif eax == VK_DOWN
-            ;invoke
+            invoke GameOperate, 3
             invoke InvalidateRect, hWnd, NULL, FALSE
         .elseif eax == VK_LEFT
-            ;invoke
+            invoke GameOperate, 0
             invoke InvalidateRect, hWnd, NULL, FALSE
         .elseif eax == VK_RIGHT
-            ;invoke
+            invoke GameOperate, 2
             invoke InvalidateRect, hWnd, NULL, FALSE
         .endif
     .elseif eax == WM_PAINT
