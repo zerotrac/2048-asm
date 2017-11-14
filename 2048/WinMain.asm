@@ -84,7 +84,7 @@ GameCountEmptyCell PROC
 	mov esi, offset gameBoard
 	mov ecx, 16
 	CountEmptyCellLoop:
-		lodsb
+		lodsd
 		.if eax == 0
 			inc ebx
 		.endif
