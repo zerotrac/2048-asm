@@ -75,6 +75,7 @@ gameBoard dd 0, 0, 0, 0,
              0, 0, 0, 0,
              0, 0, 0, 0,
              0, 0, 0, 0
+moveDelta dd 16 DUP(0)
 gameScore dd 0
 bestScore dd 0
 random_seed dd 0
@@ -247,6 +248,68 @@ GameOperate PROC opr: DWORD
 	.endif
 	ret
 GameOperate ENDP
+
+GameLazyOperate PROC opr: DWORD
+	local oprDir: DWORD, oprIterDir: DWORD
+	invoke GameClearBoard, offset moveDelta
+	mov esi, offset gameBoard
+	mov edi, offset moveDelta
+	.if opr >= 2
+		add esi, 60
+		add edi, 60
+	.endif
+	
+	mov eax, opr
+	movsx ebx, direction[eax]
+	mov oprDir, ebx
+
+	mov eax, opr
+	movsx ebx, iterate_direction[eax]
+	mov oprIterDir, ebx
+
+	mov ecx, 0
+	.while ecx < 4
+		push ecx
+		push esi
+		push edi
+
+		mov ecx, 1
+		mov edx, 0  ; Move distance
+		mov ebx, [esi]  ; Last number
+		.if ebx == 0
+			inc edx
+		.endif
+		
+		.while ecx <= 3
+			sub esi, oprDir
+			sub edi, oprDir
+			mov eax, [esi]
+			.if eax != 0
+				.if eax != ebx
+					mov [edi], edx
+					mov ebx, eax
+				.else
+					inc edx
+					mov [edi], edx
+					mov ebx, 0
+				.endif
+			.else
+				inc edx
+			.endif
+			inc ecx
+		.endw
+
+		pop edi
+		add edi, oprIterDir
+
+		pop esi
+		add esi, oprIterDir
+
+		pop ecx
+		inc ecx
+	.endw
+	ret
+GameLazyOperate ENDP
 
 ; game_board is an zero-filled array whose size is 16
 GameInit PROC
