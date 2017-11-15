@@ -267,6 +267,12 @@ GameOperate PROC opr: DWORD
 					mul edx
 					mov DWORD PTR [edi], eax
 					add gameScore, eax
+					mov eax, gameScore
+
+					.if eax > bestScore
+						mov bestScore, eax
+					.endif
+
 					mov eax, 0
 					mov [esi], eax
 					sub edi, ebx
