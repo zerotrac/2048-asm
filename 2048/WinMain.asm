@@ -77,6 +77,7 @@ gameBoard dd 0, 0, 0, 0,
              0, 0, 0, 0
 moveDelta dd 16 DUP(0)
 gameScore dd 0
+gameOver dd 0
 bestScore dd 0
 random_seed dd 0
 
@@ -175,6 +176,53 @@ GameProduceNumber PROC num_empty: DWORD
 GameProduceNumber ENDP
 
 GameCheckOver PROC
+	mov esi, offset gameBoard
+	mov ecx, 4
+	CheckOverOuterLoop1:
+		push ecx
+		push esi
+
+		mov ecx, 3
+		CheckOverInnerLoop1:
+			mov eax, [esi + 4]
+			.if [esi] == eax
+				pop esi
+				pop ecx
+				ret
+			.endif
+			add esi, 4
+		loop CheckOverInnerLoop1
+		
+		pop esi
+		pop ecx
+
+		add esi, 16
+	loop CheckOverOuterLoop1
+	
+	mov esi, offset gameBoard
+	mov ecx, 4
+	CheckOverOuterLoop2:
+		push ecx
+		push esi
+
+		mov ecx, 3
+		CheckOverInnerLoop2:
+			mov eax, [esi + 16]
+			.if [esi] == eax
+				pop esi
+				pop ecx
+				ret
+			.endif
+			add esi, 16
+		loop CheckOverInnerLoop2
+		
+		pop esi
+		pop ecx
+
+		add esi, 4
+	loop CheckOverOuterLoop2
+
+	mov gameOver, 1
 	ret
 GameCheckOver ENDP
 
@@ -242,8 +290,9 @@ GameOperate PROC opr: DWORD
 		push eax
 		invoke GameProduceNumber, eax
 		pop eax
+		dec eax
 		.if eax == 0
-			; check_game_end
+			invoke GameCheckOver
 		.endif
 	.endif
 	ret
@@ -317,6 +366,7 @@ GameInit PROC
 	invoke GameProduceNumber, 16
 	invoke GameProduceNumber, 15
 	mov gameScore, 0
+	mov gameOver, 0
 	ret
 GameInit ENDP
 
