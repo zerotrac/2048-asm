@@ -29,11 +29,16 @@ ICO_2048     equ   2048h
 
 ;==== Window definitions ====
 WINDOW_WIDTH equ 600
-WINDOW_HEIGHT equ 1000
+WINDOW_HEIGHT equ 950
 WINDOW_BIAS equ 10
 BOARD_EDGE equ 502
 CELL_EDGE equ 108
 PATH_WIDTH equ 14
+SCORE_WIDTH equ 138
+SCORE_HEIGHT equ 55
+SCORE_PATH equ 5
+NEW_WIDTH equ 128
+NEW_HEIGHT equ 40
 
 ;============================
 
@@ -43,6 +48,28 @@ hWinMain dd ?
 hMenu dd ?
 hIcon dd ?
 
+hFont0 dd ?
+hFont1 dd ?
+hFont2 dd ?
+hFont3 dd ?
+hFont4 dd ?
+
+hFont_d1 dd ?
+hFont_d3 dd ?
+hFont_d4 dd ?
+
+hBrush_d2 dd ?
+hBrush_d4 dd ?
+hBrush_d8 dd ?
+hBrush_d16 dd ?
+hBrush_d32 dd ?
+hBrush_d64 dd ?
+hBrush_d128 dd ?
+hBrush_d256 dd ?
+hBrush_d512 dd ?
+hBrush_d1024 dd ?
+hBrush_d2048 dd ?
+
 .data
 gameBoard dd 0, 0, 0, 0,
              0, 0, 0, 0,
@@ -51,6 +78,9 @@ gameBoard dd 0, 0, 0, 0,
 gameScore dd 0
 bestScore dd 0
 random_seed dd 0
+
+hColor_d1 dd 0656e77h
+hColor_d2 dd 0f2f6f9h
 
 .const
 direction SBYTE -4, -16, 4, 16
@@ -63,6 +93,15 @@ szButtonText db '&OK', 0
 szAboutTitle db '关于游戏', 0
 szAboutText db '一个使用汇编的简单2048小游戏', 0dh, 0ah, '使用方向键控制方块的移动', 0
 szFormat db '%d', 0
+szFontName db 'Clear Sans', 0
+
+sent0 db '2048'
+sent1_1 db 'SCORE'
+sent1_2 db 'BEST'
+sent2 db 'Join the numbers and get to the 2048 tile!'
+sent3 db 'New Game'
+sent4_1 db 'HOW TO PLAY: Use your arrow keys to move the tiles. When '
+sent4_2 db 'two tiles with the same number touch, they merge into one!'
 
 .code
 rand PROC
@@ -226,22 +265,83 @@ _DisplayAbout endp
     ret
 _Quit endp
 
+_DrawDigit proc,
+    _hDc, _cellStartX, _cellStartY, _num
+
+    local @digitStartX, @digitStartY
+    local @szBuffer[10]: byte
+
+    pushad
+    
+    mov eax, _cellStartX
+    mov @digitStartX, eax
+    mov eax, _cellStartY
+    mov @digitStartY, eax
+
+    .if _num < 10
+        invoke SelectObject, _hDc, hFont_d1
+        add @digitStartX, 37
+        add @digitStartY, 18
+    .elseif _num < 100
+        invoke SelectObject, _hDc, hFont_d1
+        add @digitStartX, 21
+        add @digitStartY, 18
+    .elseif _num < 1000
+        invoke SelectObject, _hDc, hFont_d3
+        add @digitStartX, 13
+        add @digitStartY, 24
+    .else
+        invoke SelectObject, _hDc, hFont_d4
+        add @digitStartX, 12
+        add @digitStartY, 31
+    .endif
+
+    invoke wsprintf, addr @szBuffer, addr szFormat, _num
+    invoke TextOut, _hDc, @digitStartX, @digitStartY, addr @szBuffer, eax
+
+    popad
+    ret
+_DrawDigit endp
+
 _DrawBoard proc,
     _hWnd, _hDc
 
     local @boardStartX, @boardStartY, @boardEndX, @boardEndY
     local @cellStartX, @cellStartY, @cellEndX, @cellEndY
+    local @scoreStartX, @scoreStartY, @scoreEndX, @scoreEndY
+    local @bestStartX, @bestStartY, @bestEndX, @bestEndY
+    local @newStartX, @newStartY, @newEndX, @newEndY
+    local @bghDc, @digit
+    local @x, @y, @len
     local @szBuffer[10]: byte
-
-    mov @boardStartX, (WINDOW_WIDTH - BOARD_EDGE) / 2 - WINDOW_BIAS
-    mov @boardStartY, 100
-    mov @boardEndX, (WINDOW_WIDTH + BOARD_EDGE) / 2 - WINDOW_BIAS
-    mov @boardEndY, BOARD_EDGE + 100
-
+    
     pushad
 
-    invoke SetBkMode, _hDc, TRANSPARENT
-    invoke SetTextColor, _hDc, 0h
+    mov @boardStartX, (WINDOW_WIDTH - BOARD_EDGE) / 2 - WINDOW_BIAS
+    mov @boardStartY, 225
+    mov @boardEndX, (WINDOW_WIDTH + BOARD_EDGE) / 2 - WINDOW_BIAS
+    mov @boardEndY, BOARD_EDGE + 225
+    
+    mov eax, @boardEndX
+    mov @bestEndX, eax
+    sub eax, SCORE_WIDTH
+    mov @bestStartX, eax
+    mov @bestStartY, 35
+    mov @bestEndY, SCORE_HEIGHT + 35
+
+    sub eax, SCORE_PATH
+    mov @scoreEndX, eax
+    sub eax, SCORE_WIDTH
+    mov @scoreStartX, eax
+    mov @scoreStartY, 35
+    mov @scoreEndY, SCORE_HEIGHT + 35
+
+    mov eax, @boardEndX
+    mov @newEndX, eax
+    sub eax, NEW_WIDTH
+    mov @newStartX, eax
+    mov @newStartY, 142
+    mov @newEndY, NEW_HEIGHT + 142
 
     invoke GetStockObject, NULL_PEN
     invoke SelectObject, _hDc, eax
@@ -249,10 +349,84 @@ _DrawBoard proc,
     invoke SelectObject, _hDc, eax
     invoke DeleteObject, eax
     invoke RoundRect, _hDc, @boardStartX, @boardStartY, @boardEndX, @boardEndY, 6, 6
+    
+    invoke SetBkMode, _hDc, TRANSPARENT
+    
+    invoke SelectObject, _hDc, hFont0
+    invoke SetTextColor, _hDc, 0656e77h
+    invoke TextOut, _hDc, @boardStartX, 30, addr sent0, lengthof sent0
 
-    invoke CreateSolidBrush, 0b4c1cdh
+    invoke RoundRect, _hDc, @scoreStartX, @scoreStartY, @scoreEndX, @scoreEndY, 3, 3
+    invoke RoundRect, _hDc, @bestStartX, @bestStartY, @bestEndX, @bestEndY, 3, 3
+
+    invoke SelectObject, _hDc, hFont1
+    invoke SetTextColor, _hDc, 0dae4eeh
+    mov eax, @scoreStartX
+    mov ebx, @scoreStartY
+    add eax, 48
+    add ebx, 6
+    invoke TextOut, _hDc, eax, ebx, addr sent1_1, lengthof sent1_1
+    mov eax, @bestStartX
+    mov ebx, @bestStartY
+    add eax, 53
+    add ebx, 6
+    invoke TextOut, _hDc, eax, ebx, addr sent1_2, lengthof sent1_2
+
+    invoke SelectObject, _hDc, hFont4
+    invoke SetTextColor, _hDc, 0ffffffh
+    invoke wsprintf, addr @szBuffer, addr szFormat, gameScore
+    mov @len, eax
+    mov edx, 0
+    mov ebx, 15
+    mul ebx
+    sub eax, SCORE_WIDTH
+    neg eax
+    shr eax, 1
+    add eax, @scoreStartX
+    add eax, 1
+    mov @x, eax
+    mov @y, 55
+    invoke TextOut, _hDc, @x, @y, addr @szBuffer, @len
+
+    invoke SetTextColor, _hDc, 0ffffffh
+    invoke wsprintf, addr @szBuffer, addr szFormat, bestScore
+    mov @len, eax
+    mov edx, 0
+    mov ebx, 15
+    mul ebx
+    sub eax, SCORE_WIDTH
+    neg eax
+    shr eax, 1
+    add eax, @bestStartX
+    add eax, 1
+    mov @x, eax
+    mov @y, 55
+    invoke TextOut, _hDc, @x, @y, addr @szBuffer, @len
+
+    invoke SelectObject, _hDc, hFont2
+    invoke SetTextColor, _hDc, 0656e77h
+    invoke TextOut, _hDc, @boardStartX, 150, addr sent2, lengthof sent2
+
+    invoke CreateSolidBrush, 0667a8fh
     invoke SelectObject, _hDc, eax
     invoke DeleteObject, eax
+    invoke RoundRect, _hDc, @newStartX, @newStartY, @newEndX, @newEndY, 3, 3
+
+    invoke SelectObject, _hDc, hFont3
+    invoke SetTextColor, _hDc, 0f2f6f9h
+    mov eax, @newStartX
+    mov ebx, @newStartY
+    add eax, 20
+    add ebx, 7
+    invoke TextOut, _hDc, eax, ebx, addr sent3, lengthof sent3
+
+    invoke SelectObject, _hDc, hFont2
+    invoke SetTextColor, _hDc, 0656e77h
+    invoke TextOut, _hDc, @boardStartX, 780, addr sent4_1, lengthof sent4_1
+    invoke TextOut, _hDc, @boardStartX, 810, addr sent4_2, lengthof sent4_2
+
+    invoke CreateSolidBrush, 0b4c1cdh
+    mov @bghDc, eax
     
     mov eax, @boardStartY
     add eax, PATH_WIDTH
@@ -273,13 +447,44 @@ _DrawBoard proc,
         mov ecx, 0
         .WHILE ecx < 4
             push ecx
+            mov eax, DWORD ptr [esi]
+            mov @digit, eax
+
+            .if @digit == 0
+                invoke SelectObject, _hDc, @bghDc
+            .elseif @digit == 2
+                invoke SelectObject, _hDc, hBrush_d2
+            .elseif @digit == 4
+                invoke SelectObject, _hDc, hBrush_d4
+            .elseif @digit == 8
+                invoke SelectObject, _hDc, hBrush_d8
+            .elseif @digit == 16
+                invoke SelectObject, _hDc, hBrush_d16
+            .elseif @digit == 32
+                invoke SelectObject, _hDc, hBrush_d32
+            .elseif @digit == 64
+                invoke SelectObject, _hDc, hBrush_d64
+            .elseif @digit == 128
+                invoke SelectObject, _hDc, hBrush_d128
+            .elseif @digit == 256
+                invoke SelectObject, _hDc, hBrush_d256
+            .elseif @digit == 512
+                invoke SelectObject, _hDc, hBrush_d512
+            .elseif @digit == 1024
+                invoke SelectObject, _hDc, hBrush_d1024
+            .else
+                invoke SelectObject, _hDc, hBrush_d2048
+            .endif
             invoke RoundRect, _hDc, @cellStartX, @cellStartY, @cellEndX, @cellEndY, 3, 3
-
-            invoke wsprintf, addr @szBuffer, addr szFormat,  DWORD ptr [esi]
-            invoke TextOut, _hDc, @cellStartX, @cellStartY, addr @szBuffer, eax
-;           	TCHAR	szDist[13];
-
-;	TextOut(hdcBuffer, WNDWIDTH - 100, 15, szDist, wsprintf(szDist, _T("距离:%d"), m_gameStatus.totalDist));
+            
+            .if @digit > 0
+                .if @digit < 8
+                    invoke SetTextColor, _hDc, hColor_d1
+                .else
+                    invoke SetTextColor, _hDc, hColor_d2
+                .endif
+                invoke _DrawDigit, _hDc, @cellStartX, @cellStartY, DWORD ptr [esi]
+            .endif
             pop ecx
             add @cellStartX, CELL_EDGE + PATH_WIDTH
             add @cellEndX, CELL_EDGE + PATH_WIDTH
@@ -292,6 +497,7 @@ _DrawBoard proc,
         add @cellEndY, CELL_EDGE + PATH_WIDTH
     .ENDW
 
+    invoke DeleteObject, @bghDc
     popad
     ret
 _DrawBoard endp
@@ -364,6 +570,47 @@ _WinMain proc
     invoke LoadMenu, hInstance, IDM_MAIN
     mov hMenu, eax
 
+    invoke CreateFont, 105, 48, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_CHARACTER_PRECIS, CLIP_CHARACTER_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH or FF_DONTCARE, addr szFontName
+    mov hFont0, eax
+    invoke CreateFont, 20, 8, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_CHARACTER_PRECIS, CLIP_CHARACTER_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH or FF_DONTCARE, addr szFontName
+    mov hFont1, eax
+    invoke CreateFont, 26, 11, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_CHARACTER_PRECIS, CLIP_CHARACTER_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH or FF_DONTCARE, addr szFontName
+    mov hFont2, eax
+    invoke CreateFont, 26, 11, 0, 0, FW_BLACK, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_CHARACTER_PRECIS, CLIP_CHARACTER_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH or FF_DONTCARE, addr szFontName
+    mov hFont3, eax
+    invoke CreateFont, 33, 15, 0, 0, FW_BLACK, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_CHARACTER_PRECIS, CLIP_CHARACTER_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH or FF_DONTCARE, addr szFontName
+    mov hFont4, eax
+
+    invoke CreateFont, 72, 33, 0, 0, FW_BLACK, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_CHARACTER_PRECIS, CLIP_CHARACTER_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH or FF_DONTCARE, addr szFontName
+    mov hFont_d1, eax
+    invoke CreateFont, 59, 27, 0, 0, FW_BLACK, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_CHARACTER_PRECIS, CLIP_CHARACTER_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH or FF_DONTCARE, addr szFontName
+    mov hFont_d3, eax
+    invoke CreateFont, 46, 21, 0, 0, FW_BLACK, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_CHARACTER_PRECIS, CLIP_CHARACTER_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH or FF_DONTCARE, addr szFontName
+    mov hFont_d4, eax
+
+    invoke CreateSolidBrush, 0dae4eeh
+    mov hBrush_d2, eax
+    invoke CreateSolidBrush, 0c8e0edh
+    mov hBrush_d4, eax
+    invoke CreateSolidBrush, 079b1f2h
+    mov hBrush_d8, eax
+    invoke CreateSolidBrush, 06395f5h
+    mov hBrush_d16, eax
+    invoke CreateSolidBrush, 05f7cf6h
+    mov hBrush_d32, eax
+    invoke CreateSolidBrush, 03b5ef6h
+    mov hBrush_d64, eax
+    invoke CreateSolidBrush, 072cfedh
+    mov hBrush_d128, eax
+    invoke CreateSolidBrush, 061ccedh
+    mov hBrush_d256, eax
+    invoke CreateSolidBrush, 050c8edh
+    mov hBrush_d512, eax
+    invoke CreateSolidBrush, 03fc5edh
+    mov hBrush_d1024, eax
+    invoke CreateSolidBrush, 02ec2edh
+    mov hBrush_d2048, eax
+
     invoke LoadAccelerators, hInstance, IDA_MAIN
     mov @hAccelerator, eax
 
@@ -387,7 +634,7 @@ _WinMain proc
     invoke CreateWindowEx, WS_EX_CLIENTEDGE, offset szClassName, offset szCaptionMain, WS_OVERLAPPED or WS_CAPTION or WS_SYSMENU or WS_MINIMIZEBOX, 100, 100, WINDOW_WIDTH, WINDOW_HEIGHT, NULL, hMenu, hInstance, NULL
     mov hWinMain, eax
 
-    invoke CreateWindowEx, NULL, offset szButton, offset szButtonText, WS_CHILD or WS_VISIBLE, 10, 10, 65, 22, hWinMain, 1, hInstance, NULL
+    ;invoke CreateWindowEx, NULL, offset szButton, offset szButtonText, WS_CHILD or WS_VISIBLE, 10, 10, 65, 22, hWinMain, 1, hInstance, NULL
 
     invoke ShowWindow, hWinMain, SW_SHOWNORMAL
 
