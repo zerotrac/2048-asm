@@ -48,6 +48,8 @@ gameBoard dd 0, 0, 0, 0,
              0, 0, 0, 0,
              0, 0, 0, 0,
              0, 0, 0, 0
+gameScore dd 0
+bestScore dd 0
 random_seed dd 0
 
 .const
@@ -166,6 +168,7 @@ GameOperate PROC opr: DWORD
 					mov edx, 2
 					mul edx
 					mov DWORD PTR [edi], eax
+					add gameScore, eax
 					mov eax, 0
 					mov [esi], eax
 					sub edi, ebx
@@ -206,6 +209,7 @@ GameInit PROC
 	loop InitSetZero
 	invoke GameProduceNumber, 16
 	invoke GameProduceNumber, 15
+	mov gameScore, 0
 	ret
 GameInit ENDP
 
