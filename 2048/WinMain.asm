@@ -120,6 +120,16 @@ rand PROC
 	ret
 rand ENDP
 
+GameClearBoard PROC board: DWORD
+	mov edi, board
+	mov eax, 0
+	mov ecx, 16
+	ClearSetZero:
+	stosd
+	loop ClearSetZero
+	ret
+GameClearBoard ENDP
+
 GameCountEmptyCell PROC
 	mov ebx, 0
 	mov esi, offset gameBoard
@@ -240,12 +250,7 @@ GameOperate ENDP
 
 ; game_board is an zero-filled array whose size is 16
 GameInit PROC
-	mov edi, offset gameBoard
-	mov eax, 0
-	mov ecx, 16
-	InitSetZero:
-	stosd
-	loop InitSetZero
+	invoke GameClearBoard, gameBoard
 	invoke GameProduceNumber, 16
 	invoke GameProduceNumber, 15
 	mov gameScore, 0
