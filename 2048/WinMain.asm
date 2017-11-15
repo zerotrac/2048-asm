@@ -313,7 +313,7 @@ GameLazyOperate ENDP
 
 ; game_board is an zero-filled array whose size is 16
 GameInit PROC
-	invoke GameClearBoard, gameBoard
+	invoke GameClearBoard, offset gameBoard
 	invoke GameProduceNumber, 16
 	invoke GameProduceNumber, 15
 	mov gameScore, 0
