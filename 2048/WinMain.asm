@@ -252,6 +252,17 @@ GameInit PROC
 	ret
 GameInit ENDP
 
+CopyBoard PROC source: DWORD, dest: DWORD
+	mov ecx, 16
+	mov esi, source
+	mov edi, dest
+	CopyBoardLoop:
+		lodsd
+		stosd
+	loop CopyBoardLoop
+	ret
+CopyBoard ENDP
+
 _DisplayAbout proc
     pushad
     invoke MessageBox, hWinMain, addr szAboutText, addr szAboutTitle, MB_OK
