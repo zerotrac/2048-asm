@@ -299,11 +299,6 @@ GameMove PROC board: DWORD, opr: DWORD
 					mul edx
 					mov DWORD PTR [edi], eax
 					add gameScore, eax
-					mov eax, gameScore
-
-					.if eax > bestScore
-						mov bestScore, eax
-					.endif
 
 					mov eax, 0
 					mov [esi], eax
@@ -332,6 +327,11 @@ GameOperate PROC board: DWORD, opr: DWORD
 
 	invoke GameMove, board, opr
 	mov operation_success, al
+
+	mov eax, gameScore
+	.if eax > bestScore
+		mov bestScore, eax
+	.endif
 
 	.if operation_success == 1
 		invoke GameCountEmptyCell, board
