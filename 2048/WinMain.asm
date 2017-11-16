@@ -153,6 +153,7 @@ GameCountEmptyCell PROC board: DWORD
 GameCountEmptyCell ENDP
 
 GameProduceNumber PROC board: DWORD, num_empty: DWORD
+	local board_end
 	call rand
 	mov ebx, num_empty
 	mov edx, 0
@@ -160,7 +161,12 @@ GameProduceNumber PROC board: DWORD, num_empty: DWORD
 
 	mov esi, board
 	mov ecx, 0
-	.while esi < board + 64
+
+	mov eax, board
+	add eax, 64
+	mov board_end, eax
+
+	.while esi < board_end
 		mov ebx, [esi]
 		.if ebx == 0
 			.if ecx == edx
@@ -804,7 +810,7 @@ _WinMain proc
 
     invoke UpdateWindow, hWinMain
 
-    invoke SetTime, hWinMain, ID_GLOBAL_TIMER
+    ;invoke SetTime, hWinMain, ID_GLOBAL_TIMER
                                                                                
     .while TRUE
         invoke GetMessage, addr @stMsg, NULL, 0, 0
