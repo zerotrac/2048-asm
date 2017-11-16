@@ -39,7 +39,10 @@ SCORE_HEIGHT equ 55
 SCORE_PATH equ 5
 NEW_WIDTH equ 128
 NEW_HEIGHT equ 40
+;============================
 
+;==== Timeer deinitions =====
+ID_GLOBAL_TIMER equ 1
 ;============================
 
 .data?
@@ -69,6 +72,9 @@ hBrush_d256 dd ?
 hBrush_d512 dd ?
 hBrush_d1024 dd ?
 hBrush_d2048 dd ?
+
+globalTimer dd ?
+animationCount dd ?
 
 .data
 gameBoard dd 0, 0, 0, 0,
@@ -449,7 +455,7 @@ _DrawDigit proc,
 _DrawDigit endp
 
 _DrawBoard proc,
-    _hWnd, _hDc
+    _hWnd, hDc
 
     local @boardStartX, @boardStartY, @boardEndX, @boardEndY
     local @cellStartX, @cellStartY, @cellEndX, @cellEndY
@@ -459,8 +465,20 @@ _DrawBoard proc,
     local @bghDc, @digit
     local @x, @y, @len
     local @szBuffer[10]: byte
+    local _hDc, _cptBmp
     
     pushad
+
+    invoke CreateCompatibleDC, hDc
+    mov _hDc, eax
+    invoke CreateCompatibleBitmap, hDc, WINDOW_WIDTH, WINDOW_HEIGHT
+    mov _cptBmp, eax
+    invoke SelectObject, _hDc, _cptBmp
+
+    invoke CreateSolidBrush, 0eff8fah
+    invoke SelectObject, _hDc, eax
+    invoke DeleteObject, eax
+    invoke Rectangle, _hDc, -5, -5, WINDOW_WIDTH, WINDOW_HEIGHT
 
     mov @boardStartX, (WINDOW_WIDTH - BOARD_EDGE) / 2 - WINDOW_BIAS
     mov @boardStartY, 225
@@ -642,7 +660,12 @@ _DrawBoard proc,
         add @cellEndY, CELL_EDGE + PATH_WIDTH
     .ENDW
 
+    invoke BitBlt, hDc, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, _hDc, 0, 0, SRCCOPY
+    ;invoke TransparentBlt, hDc, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, _hDc, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, 0000000h
+
     invoke DeleteObject, @bghDc
+    invoke DeleteObject, _cptBmp
+    invoke DeleteDC, _hDc
     popad
     ret
 _DrawBoard endp
@@ -768,8 +791,6 @@ _WinMain proc
     mov @stWndClass.cbSize, sizeof WNDCLASSEX
     mov @stWndClass.style, CS_HREDRAW or CS_VREDRAW
     mov @stWndClass.lpfnWndProc, offset _ProcWinMain
-    invoke CreateSolidBrush, 0eff8fah
-    mov @stWndClass.hbrBackground, eax
     mov @stWndClass.lpszClassName, offset szClassName
     push hIcon
     pop @stWndClass.hIcon
@@ -779,11 +800,11 @@ _WinMain proc
     invoke CreateWindowEx, WS_EX_CLIENTEDGE, offset szClassName, offset szCaptionMain, WS_OVERLAPPED or WS_CAPTION or WS_SYSMENU or WS_MINIMIZEBOX, 100, 100, WINDOW_WIDTH, WINDOW_HEIGHT, NULL, hMenu, hInstance, NULL
     mov hWinMain, eax
 
-    ;invoke CreateWindowEx, NULL, offset szButton, offset szButtonText, WS_CHILD or WS_VISIBLE, 10, 10, 65, 22, hWinMain, 1, hInstance, NULL
-
     invoke ShowWindow, hWinMain, SW_SHOWNORMAL
 
     invoke UpdateWindow, hWinMain
+
+    invoke SetTime, hWinMain, ID_GLOBAL_TIMER
                                                                                
     .while TRUE
         invoke GetMessage, addr @stMsg, NULL, 0, 0
