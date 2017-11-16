@@ -470,6 +470,10 @@ GameTreeSearchOperate PROC board: DWORD, depth: DWORD
 		mul ebx
 		add edx, eax
 
+		.if board_game_over == 1
+			sub edx, 3
+		.endif
+
 		mov esi, board
 		mov ebx, [esi]
 		mov eax, 0
