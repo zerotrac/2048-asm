@@ -132,9 +132,9 @@ GameClearBoard PROC board: DWORD
 	ret
 GameClearBoard ENDP
 
-GameCountEmptyCell PROC
+GameCountEmptyCell PROC board: DWORD
 	mov ebx, 0
-	mov esi, offset gameBoard
+	mov esi, board
 	mov ecx, 16
 	CountEmptyCellLoop:
 		lodsd
@@ -175,8 +175,8 @@ GameProduceNumber PROC num_empty: DWORD
 	ret
 GameProduceNumber ENDP
 
-GameCheckOver PROC
-	mov esi, offset gameBoard
+GameCheckOver PROC board: DWORD
+	mov esi, board
 	mov ecx, 4
 	CheckOverOuterLoop1:
 		push ecx
@@ -199,7 +199,7 @@ GameCheckOver PROC
 		add esi, 16
 	loop CheckOverOuterLoop1
 	
-	mov esi, offset gameBoard
+	mov esi, board
 	mov ecx, 4
 	CheckOverOuterLoop2:
 		push ecx
@@ -228,7 +228,7 @@ GameCheckOver ENDP
 
 GameOperate PROC opr: DWORD
 	LOCAL operation_success: BYTE
-	mov esi, offset gameBoard
+	mov esi, board
 	.if opr >= 2
 		add esi, 60
 	.endif
@@ -292,13 +292,13 @@ GameOperate PROC opr: DWORD
 	.endw
 
 	.if operation_success == 1
-		invoke GameCountEmptyCell
+		invoke GameCountEmptyCell, board
 		push eax
 		invoke GameProduceNumber, eax
 		pop eax
 		dec eax
 		.if eax == 0
-			invoke GameCheckOver
+			invoke GameCheckOver, board
 		.endif
 	.endif
 	ret
@@ -663,16 +663,16 @@ _ProcWinMain proc uses ebx edi esi,
     .elseif eax == WM_KEYDOWN
         mov eax, wParam
         .if eax == VK_UP
-            invoke GameOperate, 1
+            invoke GameOperate, addr gameBoard, 1
             invoke InvalidateRect, hWnd, NULL, FALSE
         .elseif eax == VK_DOWN
-            invoke GameOperate, 3
+            invoke GameOperate, addr gameBoard, 3
             invoke InvalidateRect, hWnd, NULL, FALSE
         .elseif eax == VK_LEFT
-            invoke GameOperate, 0
+            invoke GameOperate, addr gameBoard, 0
             invoke InvalidateRect, hWnd, NULL, FALSE
         .elseif eax == VK_RIGHT
-            invoke GameOperate, 2
+            invoke GameOperate, addr gameBoard, 2
             invoke InvalidateRect, hWnd, NULL, FALSE
         .endif
     .elseif eax == WM_PAINT
