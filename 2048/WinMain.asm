@@ -152,15 +152,15 @@ GameCountEmptyCell PROC board: DWORD
 	ret
 GameCountEmptyCell ENDP
 
-GameProduceNumber PROC num_empty: DWORD
+GameProduceNumber PROC board: DWORD, num_empty: DWORD
 	call rand
 	mov ebx, num_empty
 	mov edx, 0
 	div ebx
 
-	mov esi, offset gameBoard
+	mov esi, board
 	mov ecx, 0
-	.while esi < offset gameBoard + 64
+	.while esi < board + 64
 		mov ebx, [esi]
 		.if ebx == 0
 			.if ecx == edx
@@ -310,7 +310,7 @@ GameOperate PROC board: DWORD, opr: DWORD
 	.if operation_success == 1
 		invoke GameCountEmptyCell, board
 		push eax
-		invoke GameProduceNumber, eax
+		invoke GameProduceNumber, board, eax
 		pop eax
 		dec eax
 		.if eax == 0
@@ -385,8 +385,8 @@ GameLazyOperate ENDP
 ; game_board is an zero-filled array whose size is 16
 GameInit PROC
 	invoke GameClearBoard, offset gameBoard
-	invoke GameProduceNumber, 16
-	invoke GameProduceNumber, 15
+	invoke GameProduceNumber, offset gameBoard, 16
+	invoke GameProduceNumber, offset gameBoard, 15
 	mov gameScore, 0
 	mov gameOver, 0
 	ret
