@@ -226,7 +226,7 @@ GameCheckOver PROC board: DWORD
 	ret
 GameCheckOver ENDP
 
-GameOperate PROC opr: DWORD
+GameMove PROC board: DWORD, opr: DWORD
 	LOCAL operation_success: BYTE
 	mov esi, board
 	.if opr >= 2
@@ -290,6 +290,16 @@ GameOperate PROC opr: DWORD
 		pop ecx
 		inc ecx
 	.endw
+
+	mov al, operation_success
+	ret
+GameMove ENDP
+
+GameOperate PROC board: DWORD, opr: DWORD
+	LOCAL operation_success: BYTE
+
+	invoke GameMove, board, opr
+	mov operation_success, al
 
 	.if operation_success == 1
 		invoke GameCountEmptyCell, board
