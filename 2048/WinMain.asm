@@ -466,9 +466,35 @@ GameTreeSearchOperate PROC board: DWORD, depth: DWORD
 
 	.if depth >= 6 || board_game_over == 1
 		mov eax, num_empty_cell
-		mov ebx, gameScore
-		bsr edx, ebx
-		add eax, edx
+		mov ebx, 7
+		mul ebx
+		add edx, eax
+
+		mov esi, board
+		mov ebx, [esi]
+		mov eax, 0
+		bsr eax, ebx
+		add edx, eax
+		
+		add esi, 4
+		mov ebx, [esi]
+		mov eax, 0
+		bsr eax, ebx
+		add edx, eax
+		
+		add esi, 4
+		mov ebx, [esi]
+		mov eax, 0
+		bsr eax, ebx
+		add edx, eax
+		
+		add esi, 4
+		mov ebx, [esi]
+		mov eax, 0
+		bsr eax, ebx
+		add edx, eax
+
+		mov eax, edx
 		ret
 	.endif
 
