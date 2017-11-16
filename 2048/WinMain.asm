@@ -43,6 +43,8 @@ NEW_HEIGHT equ 40
 
 ;==== Timeer deinitions =====
 ID_GLOBAL_TIMER equ 1
+MOVE_COUNT equ 5
+MOVE_BIG equ 2333
 ;============================
 
 .data?
@@ -75,12 +77,17 @@ hBrush_d2048 dd ?
 
 globalTimer dd ?
 animationCount dd ?
+directions dd ?
 
 .data
 gameBoard dd 0, 0, 0, 0,
              0, 0, 0, 0,
              0, 0, 0, 0,
              0, 0, 0, 0
+gameBoardBackup dd 0, 0, 0, 0,
+                   0, 0, 0, 0,
+                   0, 0, 0, 0,
+                   0, 0, 0, 0
 moveDelta dd 16 DUP(0)
 gameScore dd 0
 gameOver dd 0
@@ -127,6 +134,17 @@ rand PROC
 	mov eax, edx
 	ret
 rand ENDP
+
+CopyBoard PROC source: DWORD, dest: DWORD
+	mov ecx, 16
+	mov esi, source
+	mov edi, dest
+	CopyBoardLoop:
+		lodsd
+		stosd
+	loop CopyBoardLoop
+	ret
+CopyBoard ENDP
 
 GameClearBoard PROC board: DWORD
 	mov edi, board
@@ -400,17 +418,6 @@ GameInit PROC
 	ret
 GameInit ENDP
 
-CopyBoard PROC source: DWORD, dest: DWORD
-	mov ecx, 16
-	mov esi, source
-	mov edi, dest
-	CopyBoardLoop:
-		lodsd
-		stosd
-	loop CopyBoardLoop
-	ret
-CopyBoard ENDP
-
 GameTreeSearchOperate PROTO board: DWORD, depth: DWORD
 
 GameTreeSearchRandom PROC board: DWORD, depth: DWORD
@@ -543,14 +550,140 @@ _DisplayAbout endp
     ret
 _Quit endp
 
+_GetPosition proc,
+    _StartX, _StartY, _dX, _dY
+    
+    local @RetX, @RetY
+
+    mov eax, _StartX
+    mov @RetX, eax
+    add @RetX, PATH_WIDTH
+    mov eax, _StartY
+    mov @RetY, eax
+    add @RetY, PATH_WIDTH
+
+    .while _dX > 0
+        add @RetX, CELL_EDGE
+        add @RetX, PATH_WIDTH
+        dec _dX
+    .endw
+    .while _dY > 0
+        add @RetY, CELL_EDGE
+        add @RetY, PATH_WIDTH
+        dec _dY
+    .endw
+
+    mov eax, @RetX
+    mov ebx, @RetY
+    ret
+_GetPosition endp
+
+_GetPositionPlus proc,
+    _StartX, _StartY, _dX, _dY, _dT
+
+    local @RetX, @RetY, @RetT
+
+    mov eax, _StartX
+    mov @RetX, eax
+    add @RetX, PATH_WIDTH
+    mov eax, _StartY
+    mov @RetY, eax
+    add @RetY, PATH_WIDTH
+
+    .while _dX > 0
+        add @RetX, CELL_EDGE
+        add @RetX, PATH_WIDTH
+        dec _dX
+    .endw
+    .while _dY > 0
+        add @RetY, CELL_EDGE
+        add @RetY, PATH_WIDTH
+        dec _dY
+    .endw
+
+    mov @RetT, 0
+    .while _dT > 0
+        add @RetT, CELL_EDGE
+        add @RetT, PATH_WIDTH
+        dec _dT
+    .endw
+    
+    mov eax, @RetT
+    mov edx, 0
+    mov ebx, MOVE_COUNT
+    div ebx
+    mov edx, 0
+    mov ebx, animationCount
+    sub ebx, MOVE_COUNT
+    neg ebx
+    mul ebx
+
+    .if directions == 0
+        sub @RetX, eax
+    .elseif directions == 1
+        sub @RetY, eax
+    .elseif directions == 2
+        add @RetX, eax
+    .else
+        add @RetY, eax
+    .endif
+
+    mov eax, @RetX
+    mov ebx, @RetY
+    ret
+_GetPositionPlus endp
+
 _DrawDigit proc,
     _hDc, _cellStartX, _cellStartY, _num
 
+    local @cellEndX, @cellEndY
     local @digitStartX, @digitStartY
     local @szBuffer[10]: byte
 
+    .if _num == 0
+        ret
+    .endif
+
     pushad
     
+    mov eax, _cellStartX
+    mov @cellEndX, eax
+    add @cellEndX, CELL_EDGE
+    mov eax, _cellStartY
+    mov @cellEndY, eax
+    add @cellEndY, CELL_EDGE
+    
+    .if _num == 2
+        invoke SelectObject, _hDc, hBrush_d2
+    .elseif _num == 4
+        invoke SelectObject, _hDc, hBrush_d4
+    .elseif _num == 8
+        invoke SelectObject, _hDc, hBrush_d8
+    .elseif _num == 16
+        invoke SelectObject, _hDc, hBrush_d16
+    .elseif _num == 32
+        invoke SelectObject, _hDc, hBrush_d32
+    .elseif _num == 64
+        invoke SelectObject, _hDc, hBrush_d64
+    .elseif _num == 128
+        invoke SelectObject, _hDc, hBrush_d128
+    .elseif _num == 256
+        invoke SelectObject, _hDc, hBrush_d256
+    .elseif _num == 512
+        invoke SelectObject, _hDc, hBrush_d512
+    .elseif _num == 1024
+        invoke SelectObject, _hDc, hBrush_d1024
+    .else
+        invoke SelectObject, _hDc, hBrush_d2048
+    .endif
+    invoke RoundRect, _hDc, _cellStartX, _cellStartY, @cellEndX, @cellEndY, 3, 3
+            
+    .if _num < 8
+        invoke SetTextColor, _hDc, hColor_d1
+    .else
+        invoke SetTextColor, _hDc, hColor_d2
+    .endif
+
     mov eax, _cellStartX
     mov @digitStartX, eax
     mov eax, _cellStartY
@@ -590,7 +723,7 @@ _DrawBoard proc,
     local @bestStartX, @bestStartY, @bestEndX, @bestEndY
     local @newStartX, @newStartY, @newEndX, @newEndY
     local @bghDc, @digit
-    local @x, @y, @len
+    local @x, @y, @len, @bias
     local @szBuffer[10]: byte
     local _hDc, _cptBmp
     
@@ -725,8 +858,7 @@ _DrawBoard proc,
     mov @cellEndY, eax
 
     mov ecx, 0
-    mov esi, offset gameBoard
-    .WHILE ecx < 4
+    .while ecx < 4
         mov eax, @boardStartX
         add eax, PATH_WIDTH
         mov @cellStartX, eax
@@ -735,61 +867,209 @@ _DrawBoard proc,
 
         push ecx
         mov ecx, 0
-        .WHILE ecx < 4
+        .while ecx < 4
             push ecx
-            mov eax, DWORD ptr [esi]
-            mov @digit, eax
-
-            .if @digit == 0
-                invoke SelectObject, _hDc, @bghDc
-            .elseif @digit == 2
-                invoke SelectObject, _hDc, hBrush_d2
-            .elseif @digit == 4
-                invoke SelectObject, _hDc, hBrush_d4
-            .elseif @digit == 8
-                invoke SelectObject, _hDc, hBrush_d8
-            .elseif @digit == 16
-                invoke SelectObject, _hDc, hBrush_d16
-            .elseif @digit == 32
-                invoke SelectObject, _hDc, hBrush_d32
-            .elseif @digit == 64
-                invoke SelectObject, _hDc, hBrush_d64
-            .elseif @digit == 128
-                invoke SelectObject, _hDc, hBrush_d128
-            .elseif @digit == 256
-                invoke SelectObject, _hDc, hBrush_d256
-            .elseif @digit == 512
-                invoke SelectObject, _hDc, hBrush_d512
-            .elseif @digit == 1024
-                invoke SelectObject, _hDc, hBrush_d1024
-            .else
-                invoke SelectObject, _hDc, hBrush_d2048
-            .endif
+            invoke SelectObject, _hDc, @bghDc
             invoke RoundRect, _hDc, @cellStartX, @cellStartY, @cellEndX, @cellEndY, 3, 3
-            
-            .if @digit > 0
-                .if @digit < 8
-                    invoke SetTextColor, _hDc, hColor_d1
-                .else
-                    invoke SetTextColor, _hDc, hColor_d2
-                .endif
-                invoke _DrawDigit, _hDc, @cellStartX, @cellStartY, DWORD ptr [esi]
-            .endif
             pop ecx
             add @cellStartX, CELL_EDGE + PATH_WIDTH
             add @cellEndX, CELL_EDGE + PATH_WIDTH
             inc ecx
-            add esi, TYPE DWORD
-        .ENDW
+        .endw
         pop ecx
         inc ecx
         add @cellStartY, CELL_EDGE + PATH_WIDTH
         add @cellEndY, CELL_EDGE + PATH_WIDTH
-    .ENDW
+    .endw
 
+    mov esi, offset gameBoard
+    mov edi, offset moveDelta
+
+    .if animationCount > 0
+        .if directions == 0
+            mov @y, 0
+            .while @y < 4
+                mov @x, 3
+                .while @x >= 0
+                    mov @bias, 0
+                    mov eax, @y
+                    shl eax, 4
+                    add @bias, eax
+                    mov eax, @x
+                    shl eax, 2
+                    add @bias, eax
+
+                    add esi, @bias
+                    add edi, @bias
+                    invoke _GetPositionPlus, @boardStartX, @boardStartY, @x, @y, DWORD ptr [edi]
+                    invoke _DrawDigit, _hDc, eax, ebx, DWORD ptr [esi]
+                    sub esi, @bias
+                    sub edi, @bias
+                    .break .if @x == 0
+                    dec @x
+                .endw
+                inc @y
+            .endw
+        .elseif directions == 1
+            mov @y, 3
+            .while @y >= 0
+                mov @x, 0
+                .while @x < 4
+                    mov @bias, 0
+                    mov eax, @y
+                    shl eax, 4
+                    add @bias, eax
+                    mov eax, @x
+                    shl eax, 2
+                    add @bias, eax
+
+                    add esi, @bias
+                    add edi, @bias
+                    invoke _GetPositionPlus, @boardStartX, @boardStartY, @x, @y, DWORD ptr [edi]
+                    invoke _DrawDigit, _hDc, eax, ebx, DWORD ptr [esi]
+                    sub esi, @bias
+                    sub edi, @bias
+                    inc @x
+                .endw
+                .break .if @y == 0
+                dec @y
+            .endw
+        .elseif directions == 2
+            mov @y, 0
+            .while @y < 4
+                mov @x, 0
+                .while @x < 4
+                    mov @bias, 0
+                    mov eax, @y
+                    shl eax, 4
+                    add @bias, eax
+                    mov eax, @x
+                    shl eax, 2
+                    add @bias, eax
+
+                    add esi, @bias
+                    add edi, @bias
+                    invoke _GetPositionPlus, @boardStartX, @boardStartY, @x, @y, DWORD ptr [edi]
+                    invoke _DrawDigit, _hDc, eax, ebx, DWORD ptr [esi]
+                    sub esi, @bias
+                    sub edi, @bias
+                    inc @x
+                .endw
+                inc @y
+            .endw
+        .else       
+            mov @y, 0
+            .while @y < 4
+                 mov @x, 0
+                .while @x < 4
+                    mov @bias, 0
+                    mov eax, @y
+                    shl eax, 4
+                    add @bias, eax
+                    mov eax, @x
+                    shl eax, 2
+                    add @bias, eax
+
+                    add esi, @bias
+                    add edi, @bias
+                    invoke _GetPositionPlus, @boardStartX, @boardStartY, @x, @y, DWORD ptr [edi]
+                    invoke _DrawDigit, _hDc, eax, ebx, DWORD ptr [esi]
+                    sub esi, @bias
+                    sub edi, @bias
+                    inc @x
+                .endw
+                inc @y
+            .endw
+        .endif
+    .else
+        mov @y, 0
+        .while @y < 4
+            mov @x, 0
+            .while @x < 4
+                mov edi, esi
+                mov eax, @y
+                shl eax, 4
+                add edi, eax
+                mov eax, @x
+                shl eax, 2
+                add edi, eax
+
+                invoke _GetPosition, @boardStartX, @boardStartY, @x, @y
+                invoke _DrawDigit, _hDc, eax, ebx, DWORD ptr [edi]
+                inc @x
+            .endw
+            inc @y
+        .endw
+    .endif
+    COMMENT /*
+    invoke SelectObject, _hDc, hFont3
+    invoke SetTextColor, _hDc, 0000000h
+    
+    mov esi, offset gameBoard
+    mov ecx, 4
+    mov @y, 400
+    .while ecx > 0
+        mov @x, 100
+        push ecx
+        mov ecx, 4
+        .while ecx > 0
+            push ecx
+            invoke wsprintf, addr @szBuffer, addr szFormat, DWORD ptr [esi]
+            invoke TextOut, _hDc, @x, @y, addr @szBuffer, eax
+            add esi, type DWORD
+            add @x, 20
+            pop ecx
+            dec ecx
+        .endw
+        add @y, 20
+        pop ecx
+        dec ecx
+    .endw
+    
+    mov esi, offset gameBoardBackup
+    mov ecx, 4
+    mov @y, 400
+    .while ecx > 0
+        mov @x, 200
+        push ecx
+        mov ecx, 4
+        .while ecx > 0
+            push ecx
+            invoke wsprintf, addr @szBuffer, addr szFormat, DWORD ptr [esi]
+            invoke TextOut, _hDc, @x, @y, addr @szBuffer, eax
+            add esi, type DWORD
+            add @x, 20
+            pop ecx
+            dec ecx
+        .endw
+        add @y, 20
+        pop ecx
+        dec ecx
+    .endw
+
+    mov esi, offset moveDelta
+    mov ecx, 4
+    mov @y, 400
+    .while ecx > 0
+        mov @x, 300
+        push ecx
+        mov ecx, 4
+        .while ecx > 0
+            push ecx
+            invoke wsprintf, addr @szBuffer, addr szFormat, DWORD ptr [esi]
+            invoke TextOut, _hDc, @x, @y, addr @szBuffer, eax
+            add esi, type DWORD
+            add @x, 20
+            pop ecx
+            dec ecx
+        .endw
+        add @y, 20
+        pop ecx
+        dec ecx
+    .endw
+    */
     invoke BitBlt, hDc, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, _hDc, 0, 0, SRCCOPY
-    ;invoke TransparentBlt, hDc, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, _hDc, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, 0000000h
-
+    
     invoke DeleteObject, @bghDc
     invoke DeleteObject, _cptBmp
     invoke DeleteDC, _hDc
@@ -816,24 +1096,47 @@ _ProcWinMain proc uses ebx edi esi,
         .elseif eax == IDM_PLAYER
             invoke CheckMenuRadioItem, hMenu, IDM_PLAYER, IDM_TRAIN, eax, MF_BYCOMMAND
 			invoke GameInit
+            invoke CopyBoard, addr gameBoard, addr gameBoardBackup
         .elseif eax == IDM_TRAIN
             invoke CheckMenuRadioItem, hMenu, IDM_PLAYER, IDM_TRAIN, eax, MF_BYCOMMAND
         .endif
+        mov animationCount, 0
         invoke InvalidateRect, hWnd, NULL, FALSE
     .elseif eax == WM_KEYDOWN
         mov eax, wParam
         .if eax == VK_UP
-            invoke GameOperate, addr gameBoard, 1
-            invoke InvalidateRect, hWnd, NULL, FALSE
+            invoke CopyBoard, addr gameBoardBackup, addr gameBoard
+            invoke GameLazyOperate, 1
+            invoke GameOperate, addr gameBoardBackup, 1
+            mov animationCount, MOVE_COUNT
+            mov directions, 1
         .elseif eax == VK_DOWN
-            invoke GameOperate, addr gameBoard, 3
-            invoke InvalidateRect, hWnd, NULL, FALSE
+            invoke CopyBoard, addr gameBoardBackup, addr gameBoard
+            invoke GameLazyOperate, 3
+            invoke GameOperate, addr gameBoardBackup, 3
+            mov animationCount, MOVE_COUNT
+            mov directions, 3
         .elseif eax == VK_LEFT
-            invoke GameOperate, addr gameBoard, 0
-            invoke InvalidateRect, hWnd, NULL, FALSE
+            invoke CopyBoard, addr gameBoardBackup, addr gameBoard
+            invoke GameLazyOperate, 0
+            invoke GameOperate, addr gameBoardBackup, 0
+            mov animationCount, MOVE_COUNT
+            mov directions, 0
         .elseif eax == VK_RIGHT
-            invoke GameOperate, addr gameBoard, 2
+            invoke CopyBoard, addr gameBoardBackup, addr gameBoard
+            invoke GameLazyOperate, 2
+            invoke GameOperate, addr gameBoardBackup, 2
+            mov animationCount, MOVE_COUNT
+            mov directions, 2
+        .endif
+    .elseif eax == WM_TIMER
+        .if animationCount > 0 && animationCount <= MOVE_COUNT
             invoke InvalidateRect, hWnd, NULL, FALSE
+            dec animationCount
+            .if animationCount == 0
+                invoke CopyBoard, addr gameBoardBackup, addr gameBoard
+            ;invoke InvalidateRect, hWnd, NULL, FALSE
+            .endif
         .endif
     .elseif eax == WM_PAINT
         invoke BeginPaint, hWnd, addr @stPs
@@ -931,7 +1234,7 @@ _WinMain proc
 
     invoke UpdateWindow, hWinMain
 
-    ;invoke SetTime, hWinMain, ID_GLOBAL_TIMER
+    invoke SetTimer, hWinMain, ID_GLOBAL_TIMER, 10, NULL
                                                                                
     .while TRUE
         invoke GetMessage, addr @stMsg, NULL, 0, 0
