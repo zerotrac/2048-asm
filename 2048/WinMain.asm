@@ -200,6 +200,7 @@ GameCheckOver PROC board: DWORD
 			.if [esi] == eax
 				pop esi
 				pop ecx
+				mov eax, 0
 				ret
 			.endif
 			add esi, 4
@@ -223,6 +224,7 @@ GameCheckOver PROC board: DWORD
 			.if [esi] == eax
 				pop esi
 				pop ecx
+				mov eax, 0
 				ret
 			.endif
 			add esi, 16
@@ -234,7 +236,7 @@ GameCheckOver PROC board: DWORD
 		add esi, 4
 	loop CheckOverOuterLoop2
 
-	mov gameOver, 1
+	mov eax, 1
 	ret
 GameCheckOver ENDP
 
@@ -321,6 +323,7 @@ GameOperate PROC board: DWORD, opr: DWORD
 		dec eax
 		.if eax == 0
 			invoke GameCheckOver, board
+			mov gameOver, eax
 		.endif
 	.endif
 	ret
@@ -388,7 +391,6 @@ GameLazyOperate PROC opr: DWORD
 	ret
 GameLazyOperate ENDP
 
-; game_board is an zero-filled array whose size is 16
 GameInit PROC
 	invoke GameClearBoard, offset gameBoard
 	invoke GameProduceNumber, offset gameBoard, 16
