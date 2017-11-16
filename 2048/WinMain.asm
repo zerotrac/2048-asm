@@ -411,6 +411,125 @@ CopyBoard PROC source: DWORD, dest: DWORD
 	ret
 CopyBoard ENDP
 
+GameTreeSearchOperate PROTO board: DWORD, depth: DWORD
+
+GameTreeSearchRandom PROC board: DWORD, depth: DWORD
+	local new_board[16]: DWORD, num_empty_cell: DWORD, node_score: DWORD
+
+	invoke GameCountEmptyCell, board
+	mov num_empty_cell, eax
+	mov node_score, 0
+
+	mov ecx, 10
+	GameTreeSearchRandomLoop:
+		push ecx
+
+		invoke CopyBoard, board, addr new_board
+		invoke GameProduceNumber, addr new_board, num_empty_cell
+		mov eax, depth
+		inc eax
+		invoke GameTreeSearchOperate, addr new_board, eax
+		add node_score, eax
+
+		pop ecx
+	loop GameTreeSearchRandomLoop
+
+	mov eax, node_score
+	mov ebx, 10
+	mov edx, 0
+	div ebx
+	ret
+GameTreeSearchRandom ENDP
+
+GameTreeSearchOperate PROC board: DWORD, depth: DWORD
+	local new_board[16]: DWORD, board_score: DWORD, num_empty_cell: DWORD
+	local max_score: DWORD, operation: DWORD, board_game_over: BYTE
+	invoke GameCountEmptyCell, board
+	mov num_empty_cell, eax
+	mov max_score, 0
+	mov board_game_over, 0
+
+	mov eax, gameScore
+	mov board_score, eax
+
+	.if num_empty_cell == 0
+		invoke GameCheckOver, board
+		mov board_game_over, al
+	.endif
+
+	.if depth >= 6 || board_game_over == 1
+		mov eax, num_empty_cell
+		mov ebx, gameScore
+		bsr edx, ebx
+		add eax, edx
+		ret
+	.endif
+
+	mov ecx, 0
+	.while ecx < 4
+		mov operation, ecx
+
+		invoke CopyBoard, board, addr new_board
+
+		invoke GameMove, addr new_board, operation
+		.if al == 1
+			mov eax, depth
+			inc eax
+			invoke GameTreeSearchRandom, addr new_board, eax
+
+			.if eax > max_score
+				mov max_score, eax
+			.endif
+		.endif
+
+		mov eax, board_score
+		mov gameScore, eax
+		
+		mov ecx, operation
+		inc ecx
+	.endw
+
+	mov eax, max_score
+	ret
+GameTreeSearchOperate ENDP
+
+GameAutoStep PROC
+	local board[16]: DWORD, board_score: DWORD, max_score: DWORD
+	local operation: DWORD, best_operation: DWORD
+	mov max_score, 0
+	mov best_operation, 0
+
+	mov eax, gameScore
+	mov board_score, eax
+
+	mov ecx, 0
+	.while ecx < 4
+		mov operation, ecx
+
+		invoke CopyBoard, offset gameBoard, addr board
+
+		invoke GameMove, addr board, operation
+		.if al == 1
+			invoke GameTreeSearchRandom, addr board, 1
+			.if eax > max_score
+				mov max_score, eax
+				mov ecx, operation
+				mov best_operation, ecx
+			.endif
+		.endif
+		
+		mov eax, board_score
+		mov gameScore, eax
+		
+		mov ecx, operation
+		inc ecx
+	.endw
+
+	invoke GameOperate, offset gameBoard, best_operation
+
+	ret
+GameAutoStep ENDP
+
 _DisplayAbout proc
     pushad
     invoke MessageBox, hWinMain, addr szAboutText, addr szAboutTitle, MB_OK
