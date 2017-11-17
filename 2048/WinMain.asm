@@ -16,11 +16,12 @@ IDM_MAIN     equ   2000h
 IDA_MAIN     equ   2000h
 IDM_PLAYER   equ   4101h
 IDM_TRAIN    equ   4102h
-IDM_NEW      equ   4103h
-IDM_LOAD     equ   4104h
-IDM_SAVE     equ   4105h
-IDM_ABOUT    equ   4106h
-IDM_EXIT     equ   4107h
+IDM_AI       equ   4103h
+IDM_NEW      equ   4104h
+IDM_LOAD     equ   4105h
+IDM_SAVE     equ   4106h
+IDM_ABOUT    equ   4107h
+IDM_EXIT     equ   4108h
 ;===== Menu definitions =====
 
 ;===== Icon definitions =====
@@ -41,9 +42,10 @@ NEW_WIDTH equ 128
 NEW_HEIGHT equ 40
 ;============================
 
-;==== Timeer deinitions =====
+;==== Timer definitions =====
 ID_GLOBAL_TIMER equ 1
-MOVE_COUNT equ 5
+ID_AI_TIMER equ 2
+MOVE_COUNT equ 6
 MOVE_BIG equ 2333
 ;============================
 
@@ -91,8 +93,16 @@ gameBoardBackup dd 0, 0, 0, 0,
 moveDelta dd 16 DUP(0)
 gameScore dd 0
 gameOver dd 0
+moveSuccess dd 0
 bestScore dd 0
+gameMode dd 0
 random_seed dd 0
+qData REAL8 262144 dup (0.0)
+param_alpha REAL8 0.7
+param_gamma REAL8 1.0
+nogood_reward REAL8 -4.0
+gameover_reward REAL8 -128.0
+mul2 dd 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536
 
 hColor_d1 dd 0656e77h
 hColor_d2 dd 0f2f6f9h
@@ -327,6 +337,8 @@ GameOperate PROC board: DWORD, opr: DWORD
 
 	invoke GameMove, board, opr
 	mov operation_success, al
+    movzx eax, operation_success
+    mov moveSuccess, eax
 
 	mov eax, gameScore
 	.if eax > bestScore
@@ -346,6 +358,36 @@ GameOperate PROC board: DWORD, opr: DWORD
 	.endif
 	ret
 GameOperate ENDP
+
+GameOperateNS PROC board: DWORD, opr: DWORD
+	LOCAL operation_success: BYTE
+    LOCAL @prevScore: DWORD
+
+    mov eax, gameScore
+    mov @prevScore, eax
+
+	invoke GameMove, board, opr
+	mov operation_success, al
+    movzx eax, operation_success
+    mov moveSuccess, eax
+
+	mov eax, @prevScore
+    mov gameScore, eax
+
+	.if operation_success == 1
+		invoke GameCountEmptyCell, board
+		push eax
+		invoke GameProduceNumber, board, eax
+		pop eax
+		dec eax
+		.if eax == 0
+			invoke GameCheckOver, board
+			mov gameOver, eax
+		.endif
+	.endif
+	ret
+GameOperateNS ENDP
+
 
 GameLazyOperate PROC opr: DWORD
 	local oprDir: DWORD, oprIterDir: DWORD
@@ -415,6 +457,7 @@ GameInit PROC
 	invoke GameProduceNumber, offset gameBoard, 15
 	mov gameScore, 0
 	mov gameOver, 0
+    mov moveSuccess, 0
 	ret
 GameInit ENDP
 
@@ -572,8 +615,11 @@ GameAutoStep PROC
 		inc ecx
 	.endw
 
-	invoke GameOperate, offset gameBoard, best_operation
-
+    invoke CopyBoard, offset gameBoard, offset gameBoardBackup
+	invoke GameOperate, offset gameBoardBackup, best_operation
+    invoke GameLazyOperate, best_operation
+    mov eax, best_operation
+    mov directions, eax
 	ret
 GameAutoStep ENDP
 
@@ -766,6 +812,7 @@ _DrawBoard proc,
     local @x, @y, @len, @bias
     local @szBuffer[10]: byte
     local _hDc, _cptBmp
+    local @deletedummy
     
     pushad
 
@@ -776,9 +823,15 @@ _DrawBoard proc,
     invoke SelectObject, _hDc, _cptBmp
 
     invoke CreateSolidBrush, 0eff8fah
+    ;mov @bias, eax
+    mov @deletedummy, eax
     invoke SelectObject, _hDc, eax
-    invoke DeleteObject, eax
     invoke Rectangle, _hDc, -5, -5, WINDOW_WIDTH, WINDOW_HEIGHT
+    invoke DeleteObject, @deletedummy
+
+    ;invoke wsprintf, addr @szBuffer, addr szFormat, @bias
+    ;invoke TextOut, _hDc, 100, 150, addr @szBuffer, eax
+    ;mov @bias, 0
 
     mov @boardStartX, (WINDOW_WIDTH - BOARD_EDGE) / 2 - WINDOW_BIAS
     mov @boardStartY, 225
@@ -809,9 +862,10 @@ _DrawBoard proc,
     invoke GetStockObject, NULL_PEN
     invoke SelectObject, _hDc, eax
     invoke CreateSolidBrush, 0a0adbbh
+    mov @deletedummy, eax
     invoke SelectObject, _hDc, eax
-    invoke DeleteObject, eax
     invoke RoundRect, _hDc, @boardStartX, @boardStartY, @boardEndX, @boardEndY, 6, 6
+    
     
     invoke SetBkMode, _hDc, TRANSPARENT
     
@@ -821,6 +875,7 @@ _DrawBoard proc,
 
     invoke RoundRect, _hDc, @scoreStartX, @scoreStartY, @scoreEndX, @scoreEndY, 3, 3
     invoke RoundRect, _hDc, @bestStartX, @bestStartY, @bestEndX, @bestEndY, 3, 3
+    invoke DeleteObject, @deletedummy
 
     invoke SelectObject, _hDc, hFont1
     invoke SetTextColor, _hDc, 0dae4eeh
@@ -871,9 +926,10 @@ _DrawBoard proc,
     invoke TextOut, _hDc, @boardStartX, 150, addr sent2, lengthof sent2
 
     invoke CreateSolidBrush, 0667a8fh
+    mov @deletedummy, eax
     invoke SelectObject, _hDc, eax
-    invoke DeleteObject, eax
     invoke RoundRect, _hDc, @newStartX, @newStartY, @newEndX, @newEndY, 3, 3
+    invoke DeleteObject, @deletedummy
 
     invoke SelectObject, _hDc, hFont3
     invoke SetTextColor, _hDc, 0f2f6f9h
@@ -1117,15 +1173,183 @@ _DrawBoard proc,
     ret
 _DrawBoard endp
 
+_CalcStatus proc,
+    board: DWORD
+
+    local @stat
+    
+    mov @stat, 0
+    mov esi, board
+    mov ecx, 4
+    .while ecx > 0
+        push ecx
+        mov ecx, 3
+        mov eax, 0
+        .while ecx > 0
+            mov ebx, DWORD ptr [esi]
+            .if ebx == DWORD ptr [esi + type DWORD]
+                inc eax
+            .endif
+
+            dec ecx
+            add esi, type DWORD
+        .endw
+        shl @stat, 2
+        add @stat, eax
+
+        pop ecx
+        dec ecx
+        add esi, type DWORD
+    .endw
+
+    mov esi, board
+    mov ecx, 4
+    .while ecx > 0
+        mov edi, esi
+        push ecx
+        mov ecx, 3
+        mov eax, 0
+        .while ecx > 0
+            mov ebx, DWORD ptr [edi]
+            .if ebx == DWORD ptr [edi + type DWORD * 4]
+                inc eax
+            .endif
+
+            dec ecx
+            add edi, type DWORD * 4
+        .endw
+        shl @stat, 2
+        add @stat, eax
+
+        pop ecx
+        dec ecx
+        add esi, type DWORD
+    .endw
+
+    mov eax, @stat
+    ret
+_CalcStatus endp
+
+_SelectQ proc
+    local @prevStatus: DWORD
+    local @maxValue: REAL8
+    local @maxPosition: DWORD
+    local @maxValue2: REAL8
+    local @selected: DWORD
+    local @cnt: DWORD
+    local @value: REAL8
+    local @upd: REAL8
+    local @dummy: REAL8
+
+    finit
+
+    invoke _CalcStatus, addr gameBoard
+    mov @prevStatus, eax
+    shl @prevStatus, 3
+    mov @selected, 4
+
+    mov esi, offset qData
+    add esi, @prevStatus
+    mov ecx, 0
+    .while ecx < 4
+        .if @selected != 4
+            fld @maxValue
+            fcomp REAL8 ptr [esi]
+            fnstsw ax
+            sahf
+            jae jsy
+        .endif
+        push ecx
+        invoke CopyBoard, addr gameBoard, addr gameBoardBackup
+        pop ecx
+        push ecx
+        invoke GameOperateNS, addr gameBoardBackup, ecx
+        pop ecx
+        .if moveSuccess == 0
+            jmp jsy
+        .endif
+
+        fld REAL8 ptr [esi]
+        fstp @maxValue
+        mov @selected, ecx
+        mov @maxPosition, esi
+jsy:
+        inc ecx
+        add esi, type REAL8
+    .endw
+
+    invoke CopyBoard, addr gameBoard, addr gameBoardBackup
+    invoke GameOperate, addr gameBoardBackup, @selected
+
+    invoke GameCountEmptyCell, addr gameBoard
+    mov @cnt, eax
+    invoke GameCountEmptyCell, addr gameBoardBackup
+    .if @cnt >= eax
+        sub @cnt, eax
+        shl @cnt, 2
+        mov esi, offset mul2
+        add esi, @cnt
+        fild DWORD ptr[esi]
+        fstp @value
+    .else
+        fld nogood_reward
+        fstp @value
+    .endif
+    .if gameOver == 1
+        fld gameover_reward
+        fstp @value
+    .endif
+
+    invoke _CalcStatus, addr gameBoardBackup
+    shl eax, 3
+    mov esi, offset qData
+    add esi, eax
+    mov ecx, 0
+    fld REAL8 ptr [esi]
+    fstp @maxValue2
+    .while ecx < 3
+        add esi, type REAL8
+        fld @maxValue2
+        fcomp REAL8 ptr [esi]
+        fnstsw ax
+        sahf
+        jae jsy2
+        fld REAL8 ptr [esi]
+        fstp @maxValue2
+jsy2:
+        inc ecx
+    .endw
+
+    fld @maxValue
+    fstp @upd
+    fld param_gamma
+    fld @maxValue2
+    fmul
+    fld @value
+    fadd
+    fld @maxValue
+    fsub
+    fld param_alpha
+    fmul
+    fstp REAL8 ptr [@maxPosition]
+
+    mov eax, @selected
+
+    ret
+_SelectQ endp
+
 _ProcWinMain proc uses ebx edi esi,
     hWnd: HWND, uMsg: UINT, wParam: WPARAM, lParam: LPARAM
     
     local @stPs: PAINTSTRUCT
     local @hDc
                                                                                
-    mov eax,uMsg
+    mov eax, uMsg
     .if eax == WM_CREATE
-        invoke CheckMenuRadioItem, hMenu, IDM_PLAYER, IDM_TRAIN, IDM_PLAYER, MF_BYCOMMAND
+        invoke CheckMenuRadioItem, hMenu, IDM_PLAYER, IDM_AI, IDM_PLAYER, MF_BYCOMMAND
+        invoke GameInit
+        mov gameMode, 0
+        invoke CopyBoard, addr gameBoard, addr gameBoardBackup
     .elseif eax == WM_COMMAND
         mov eax, wParam
         movzx eax, ax
@@ -1134,48 +1358,85 @@ _ProcWinMain proc uses ebx edi esi,
         .elseif eax == IDM_ABOUT
             invoke _DisplayAbout
         .elseif eax == IDM_PLAYER
-            invoke CheckMenuRadioItem, hMenu, IDM_PLAYER, IDM_TRAIN, eax, MF_BYCOMMAND
+            invoke CheckMenuRadioItem, hMenu, IDM_PLAYER, IDM_AI, eax, MF_BYCOMMAND
 			invoke GameInit
+            mov gameMode, 0
             invoke CopyBoard, addr gameBoard, addr gameBoardBackup
         .elseif eax == IDM_TRAIN
-            invoke CheckMenuRadioItem, hMenu, IDM_PLAYER, IDM_TRAIN, eax, MF_BYCOMMAND
+            invoke CheckMenuRadioItem, hMenu, IDM_PLAYER, IDM_AI, eax, MF_BYCOMMAND
+            invoke GameInit
+            mov gameMode, 1
+            invoke CopyBoard, addr gameBoard, addr gameBoardBackup
+        .elseif eax == IDM_AI
+            invoke CheckMenuRadioItem, hMenu, IDM_PLAYER, IDM_AI, eax, MF_BYCOMMAND
+            invoke GameInit
+            mov gameMode, 2
+            invoke CopyBoard, addr gameBoard, addr gameBoardBackup
         .endif
         mov animationCount, 0
         invoke InvalidateRect, hWnd, NULL, FALSE
     .elseif eax == WM_KEYDOWN
         mov eax, wParam
-        .if eax == VK_UP
-            invoke CopyBoard, addr gameBoardBackup, addr gameBoard
-            invoke GameLazyOperate, 1
-            invoke GameOperate, addr gameBoardBackup, 1
-            mov animationCount, MOVE_COUNT
-            mov directions, 1
-        .elseif eax == VK_DOWN
-            invoke CopyBoard, addr gameBoardBackup, addr gameBoard
-            invoke GameLazyOperate, 3
-            invoke GameOperate, addr gameBoardBackup, 3
-            mov animationCount, MOVE_COUNT
-            mov directions, 3
-        .elseif eax == VK_LEFT
-            invoke CopyBoard, addr gameBoardBackup, addr gameBoard
-            invoke GameLazyOperate, 0
-            invoke GameOperate, addr gameBoardBackup, 0
-            mov animationCount, MOVE_COUNT
-            mov directions, 0
-        .elseif eax == VK_RIGHT
-            invoke CopyBoard, addr gameBoardBackup, addr gameBoard
-            invoke GameLazyOperate, 2
-            invoke GameOperate, addr gameBoardBackup, 2
-            mov animationCount, MOVE_COUNT
-            mov directions, 2
+        .if gameMode == 0
+            .if eax == VK_UP
+                invoke CopyBoard, addr gameBoardBackup, addr gameBoard
+                invoke GameLazyOperate, 1
+                invoke GameOperate, addr gameBoardBackup, 1
+                mov animationCount, MOVE_COUNT
+                mov directions, 1
+            .elseif eax == VK_DOWN
+                invoke CopyBoard, addr gameBoardBackup, addr gameBoard
+                invoke GameLazyOperate, 3
+                invoke GameOperate, addr gameBoardBackup, 3
+                mov animationCount, MOVE_COUNT
+                mov directions, 3
+            .elseif eax == VK_LEFT
+                invoke CopyBoard, addr gameBoardBackup, addr gameBoard
+                invoke GameLazyOperate, 0
+                invoke GameOperate, addr gameBoardBackup, 0
+                mov animationCount, MOVE_COUNT
+                mov directions, 0
+            .elseif eax == VK_RIGHT
+                invoke CopyBoard, addr gameBoardBackup, addr gameBoard
+                invoke GameLazyOperate, 2
+                invoke GameOperate, addr gameBoardBackup, 2
+                mov animationCount, MOVE_COUNT
+                mov directions, 2
+            .endif
         .endif
     .elseif eax == WM_TIMER
-        .if animationCount > 0 && animationCount <= MOVE_COUNT
-            invoke InvalidateRect, hWnd, NULL, FALSE
-            dec animationCount
-            .if animationCount == 0
+        mov eax, wParam
+        .if eax == ID_GLOBAL_TIMER
+            .if animationCount > 0 && animationCount <= MOVE_COUNT
+                invoke InvalidateRect, hWnd, NULL, FALSE
+                dec animationCount
+                .if animationCount == 0
+                    invoke CopyBoard, addr gameBoardBackup, addr gameBoard
+                .endif
+            .endif
+        .elseif eax == ID_AI_TIMER && gameMode == 1
+            .if gameOver == 0
                 invoke CopyBoard, addr gameBoardBackup, addr gameBoard
-            ;invoke InvalidateRect, hWnd, NULL, FALSE
+                invoke _SelectQ
+                mov directions, eax
+                invoke GameLazyOperate, directions
+                mov animationCount, MOVE_COUNT
+            .else
+                invoke GameInit
+                invoke CopyBoard, addr gameBoard, addr gameBoardBackup
+                mov animationCount, 0
+                invoke InvalidateRect, hWnd, NULL, FALSE
+            .endif
+        .elseif eax == ID_AI_TIMER && gameMode == 2
+            .if gameOver == 0
+                invoke CopyBoard, addr gameBoardBackup, addr gameBoard
+                invoke GameAutoStep
+                mov animationCount, MOVE_COUNT
+            .else
+                invoke GameInit
+                invoke CopyBoard, addr gameBoard, addr gameBoardBackup
+                mov animationCount, 0
+                invoke InvalidateRect, hWnd, NULL, FALSE         
             .endif
         .endif
     .elseif eax == WM_PAINT
@@ -1198,6 +1459,11 @@ _WinMain proc
     local @stWndClass: WNDCLASSEX
     local @stMsg: MSG
     local @hAccelerator
+    local @tm: SYSTEMTIME
+
+    invoke GetSystemTime, addr @tm
+    movzx eax, @tm.wMilliseconds
+    mov random_seed, eax
                                                                                
     invoke GetModuleHandle, NULL
     mov hInstance, eax
@@ -1275,6 +1541,7 @@ _WinMain proc
     invoke UpdateWindow, hWinMain
 
     invoke SetTimer, hWinMain, ID_GLOBAL_TIMER, 10, NULL
+    invoke SetTimer, hWinMain, ID_AI_TIMER, 20, NULL
                                                                                
     .while TRUE
         invoke GetMessage, addr @stMsg, NULL, 0, 0
