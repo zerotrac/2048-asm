@@ -514,6 +514,11 @@ GameTreeSearchOperate PROC board: DWORD, depth: DWORD
 			inc eax
 			invoke GameTreeSearchRandom, addr new_board, eax
 
+			mov ecx, operation
+			.if ecx == 3
+				sub eax, 1
+			.endif
+
 			.if eax > max_score
 				mov max_score, eax
 			.endif
@@ -548,9 +553,14 @@ GameAutoStep PROC
 		invoke GameMove, addr board, operation
 		.if al == 1
 			invoke GameTreeSearchRandom, addr board, 1
+
+			mov ecx, operation
+			.if ecx == 3
+				sub eax, 3
+			.endif
+
 			.if eax > max_score
 				mov max_score, eax
-				mov ecx, operation
 				mov best_operation, ecx
 			.endif
 		.endif
