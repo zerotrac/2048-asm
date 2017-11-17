@@ -17,11 +17,10 @@ IDA_MAIN     equ   2000h
 IDM_PLAYER   equ   4101h
 IDM_TRAIN    equ   4102h
 IDM_AI       equ   4103h
-IDM_NEW      equ   4104h
-IDM_LOAD     equ   4105h
-IDM_SAVE     equ   4106h
-IDM_ABOUT    equ   4107h
-IDM_EXIT     equ   4108h
+IDM_LOAD     equ   4104h
+IDM_SAVE     equ   4105h
+IDM_ABOUT    equ   4106h
+IDM_EXIT     equ   4107h
 ;===== Menu definitions =====
 
 ;===== Icon definitions =====
@@ -111,22 +110,22 @@ hColor_d2 dd 0f2f6f9h
 direction SBYTE -4, -16, 4, 16
 iterate_direction SBYTE 16, 4, -16, -4
 
-szClassName db 'MyClass', 0
-szCaptionMain db '2048-asm', 0
-szButton db 'button', 0
-szButtonText db '&OK', 0
-szAboutTitle db '关于游戏', 0
-szAboutText db '一个使用汇编的简单2048小游戏', 0dh, 0ah, '使用方向键控制方块的移动', 0
-szFormat db '%d', 0
-szFontName db 'Clear Sans', 0
+szClassName byte 'MyClass', 0
+szCaptionMain byte '2048-asm', 0
+szAboutTitle byte '关于游戏', 0
+szAboutText byte '一个使用汇编的简单2048小游戏', 0dh, 0ah, '使用方向键控制方块的移动', 0
+szFormat byte '%d', 0
+szFontName byte 'Clear Sans', 0
+szFile byte 'model2048.gml', 0
 
-sent0 db '2048'
-sent1_1 db 'SCORE'
-sent1_2 db 'BEST'
-sent2 db 'Join the numbers and get to the 2048 tile!'
-sent3 db 'New Game'
-sent4_1 db 'HOW TO PLAY: Use your arrow keys to move the tiles. When '
-sent4_2 db 'two tiles with the same number touch, they merge into one!'
+sent0 byte '2048', 0
+sent1_1 byte 'SCORE', 0
+sent1_2 byte 'BEST', 0
+sent2 byte 'Join the numbers and get to the 2048 tile!', 0
+sent3_1 byte 'Gaming', 0
+sent3_2 byte 'Game Over', 0
+sent4_1 byte 'HOW TO PLAY: Use your arrow keys to move the tiles. When ', 0
+sent4_2 byte 'two tiles with the same number touch, they merge into one!', 0
 
 .code
 rand PROC
@@ -935,9 +934,16 @@ _DrawBoard proc,
     invoke SetTextColor, _hDc, 0f2f6f9h
     mov eax, @newStartX
     mov ebx, @newStartY
-    add eax, 20
-    add ebx, 7
-    invoke TextOut, _hDc, eax, ebx, addr sent3, lengthof sent3
+    .if gameOver == 0
+        add eax, 32
+        add ebx, 7
+        invoke TextOut, _hDc, eax, ebx, addr sent3_1, lengthof sent3_1
+    .else
+        add eax, 18
+        add ebx, 7
+        invoke TextOut, _hDc, eax, ebx, addr sent3_2, lengthof sent3_2
+    .endif
+    
 
     invoke SelectObject, _hDc, hFont2
     invoke SetTextColor, _hDc, 0656e77h
@@ -1338,6 +1344,28 @@ jsy2:
     ret
 _SelectQ endp
 
+_SaveFile proc
+    local writtenByte: DWORD
+
+	invoke CreateFile, offset szFile, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0
+	mov ebx, eax
+	invoke WriteFile, ebx, offset qData, 262144 * type REAL8, addr writtenByte, 0
+	invoke CloseHandle, ebx
+    ret
+_SaveFile endp
+
+_LoadFile proc
+    local readByte: DWORD
+
+    invoke CreateFile, offset szFile, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0
+    .if eax
+	    mov ebx, eax
+	    invoke ReadFile, ebx, offset qData, 262144 * type REAL8, addr readByte, 0
+	.endif
+	invoke CloseHandle, ebx
+    ret
+_LoadFile endp
+
 _ProcWinMain proc uses ebx edi esi,
     hWnd: HWND, uMsg: UINT, wParam: WPARAM, lParam: LPARAM
     
@@ -1372,6 +1400,10 @@ _ProcWinMain proc uses ebx edi esi,
             invoke GameInit
             mov gameMode, 2
             invoke CopyBoard, addr gameBoard, addr gameBoardBackup
+        .elseif eax == IDM_LOAD
+            invoke _LoadFile
+        .elseif eax == IDM_SAVE
+            invoke _SaveFile
         .endif
         mov animationCount, 0
         invoke InvalidateRect, hWnd, NULL, FALSE
